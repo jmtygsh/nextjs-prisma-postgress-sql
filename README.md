@@ -54,14 +54,14 @@ Important Note: We've added a password field to the User model to support the "C
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+  runtime  = "vercel-edge"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// Required models for Auth.js Prisma Adapter
 
 model Account {
   id                String  @id @default(cuid())
@@ -166,19 +166,19 @@ Create a file at lib/prisma.ts:
 ```bash 
 // lib/prisma.ts
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '../app/generated/prisma'
+import { withAccelerate } from '@prisma/extension-accelerate'
 
-const globalForPrisma = global as unknown as {
-  prisma: PrismaClient | undefined
+const globalForPrisma = global as unknown as { 
+    prisma: PrismaClient
 }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query'],
-  })
+
+const prisma = globalForPrisma.prisma || new PrismaClient().$extends(withAccelerate())
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+
+export default prisma
 
 ```
 
@@ -193,7 +193,7 @@ This file contains configuration that is safe to run on the Edge, including your
 
 ```bash 
 
-// auth.config.ts
+// create an file on lib folder: auth.config.ts
 
 import type { NextAuthConfig } from "next-auth";
 import GitHub from "next-auth/providers/github";
@@ -223,16 +223,20 @@ This is the main configuration file that brings everything together, including t
 
 ```bash 
 
+// create an file on lib folder: auth.ts
+
+
 // auth.ts
 
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { PrismaClient } from "../app/generated/prisma";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
-
-import { prisma } from "@/lib/prisma";
 import authConfig from "./auth.config";
 
+
+const prisma = new PrismaClient();
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
@@ -289,6 +293,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 });
 
+
 ```
 
 
@@ -314,7 +319,7 @@ Middleware protects routes and redirects users based on their authentication sta
 
 ```bash 
 
-// middleware.ts
+// create an file on lib folder:  middleware.ts
 
 import NextAuth from "next-auth";
 import authConfig from "./auth.config";
@@ -363,7 +368,7 @@ Create a file app/providers.tsx:
 
 ```bash 
 
-// app/providers.tsx
+// create an file on lib folder: providers.tsx
 "use client";
 
 import { SessionProvider } from "next-auth/react";
@@ -379,7 +384,7 @@ then use it in your root layout app/layout.tsx:
 ```bash 
 
 // app/layout.tsx
-import Providers from "./providers";
+import Providers from "@/lib/providers";
 
 export default function RootLayout({
   children,
